@@ -11,66 +11,32 @@ const actualYear = dateObj.getUTCFullYear()
 const actualHour = dateObj.getUTCHours()-3
 const actualMinute = dateObj.getUTCMinutes()
 const actualSeconds = dateObj.getUTCSeconds()
-const URL_BYMA_ACCIONES = 'https://www.byma.com.ar/acciones/panel/lideres'
-const DateNow = actualDay+'-'+actualMonth+'-'+actualYear+' Hour:'+actualHour+':'+actualMinute+':'+actualSeconds
+const URL_BNA = 'https://www.bna.com.ar/Personas'
+const DateNow = ' Hora:'+actualHour+':'+actualMinute+':'+actualSeconds
+const dia_ejecucion= actualDay+'-'+actualMonth+'-'+actualYear
 
 
 
 const dataOutput = async () => {
     return new Promise(async function(resolve, reject) {
         try {
-            await page.waitForSelector('#dataStocks > tbody > tr')
-            let columnListado = await page.$$('#dataStocks > tbody > tr')
-            let dataListado = await page.evaluate(columnListado => columnListado.innerText, columnListado[0])
-            const convertStringify = JSON.stringify(dataListado)
+            const fecha = await page.$eval('#divisas > table > thead > tr > th.fechaCot', e=> e.innerText)
+            let dolarVentaFromBilletes = await page.$eval('#billetes > table > tbody > tr:nth-child(1) > td:nth-child(3)', e => e.innerText)
+            const moneda = ' Dolar USA'
+            await page.click('#rightHome > div.col-md-3 > div > ul > li:nth-child(2) > a')
+            await page.waitForSelector('#divisas > table > tbody > tr:nth-child(1)')
 
-            console.log(convertStringify)
+            let dolarCotizacionDivisas = await page.$eval('#divisas > table > tbody > tr:nth-child(1) > td:nth-child(3)', e => e.innerText)
 
+            const JSONData = JSON.stringify({
+                "Cotizacion Billetes": {"precioVenta":dolarVentaFromBilletes+moneda},
+                "Cotizacion Divisas": {"precioVenta":dolarCotizacionDivisas+moneda},
+                "timestamp": {"Fecha":fecha + DateNow}
+            })
 
-            let positionInColumns
-            let lenghtColumnsInTable = (await page.$$('#dataStocks > tbody > tr')).length
-            console.log(lenghtColumnsInTable)
-
-            for(positionInColumns = 0; positionInColumns < lenghtColumnsInTable; positionInColumns++) {
-                dataListado = await page.evaluate(columnListado => columnListado.innerText, columnListado[positionInColumns])
-                let separatedataListado  = dataListado.split('\t')
-                let resultInTable = {  
-                     especie: separatedataListado[0],
-                     cierre_listado : separatedataListado[1],
-                     precio_apertura : separatedataListado[2],
-                     precio_maximo : separatedataListado[3],
-                     precio_minimo : separatedataListado[4], 
-                     ultimo_precio : separatedataListado[5],
-                     variacion_diaria : separatedataListado[6],
-                     volumen_efectivo$ : separatedataListado[7],
-                     volumen_minimal : separatedataListado[8],
-                     precio_pom_pond : separatedataListado[9]
-                }
-                console.log(resultInTable.especie+' '+resultInTable.cierre_listado)
-                const putJSONData = JSON.stringify({
-                
-                "Info": {
-
-                    "Date": DateNow,
-                    "Especie": resultInTable.especie,
-                    "Cierre Listado": resultInTable.cierre_listado,
-                    "Precio Apertura": resultInTable.precio_apertura,
-                    "Precio Maximo": resultInTable.precio_maximo,
-                    "Precio Minimo": resultInTable.precio_minimo,
-                    "Ultimo Precio": resultInTable.ultimo_precio,
-                    "Variacion Diaria": resultInTable.variacion_diaria,
-                    "Volumen Efectivo $": resultInTable.volumen_efectivo$,
-                    "Volumen Minimal": resultInTable.volumen_minimal,
-                    "Precio Pom Pond": resultInTable.precio_pom_pond
-                  },
-                },)
-                fs.appendFileSync('byma_Valores'+actualDay+actualMonth+actualYear+'.json',putJSONData)
-     
-                console.log(putJSONData)
-            }
-
-        browser.close()
-        process.exit()
+            fs.writeFileSync('BnaExtraccionDolarVenta'+dia_ejecucion+'.json', JSONData,'utf8')
+            resolve(true)
+            logSuccessAndExit()
         } catch (err) {
             console.log(err)
             reject(err)
@@ -82,22 +48,16 @@ const dataOutput = async () => {
 const processDataRequest = async () => {
     return new Promise(async function(resolve, reject) {
            try {
-                await page.waitFor(5000)
-                if(await page.$('body > main > div.wrapper.data-section > h1') === null){
-                    console.log('Sitio no disponible') 
-                    logErrorAndExit(true)                  
+                await page.waitForSelector('div.tabSmall')
+                try {
+                    const result = await dataOutput()
+                    resolve(result)
+                } catch (err) {
+                    reject(err.message)
                 }
-
-            try {
-                const result = await dataOutput()
-                resolve(result)
-            } catch (err) {
-                reject(err.message)
-            }
-            
             }catch(err){
             //browser.close()
-                console.log("Fallo")
+                console.log("No se encontro el selector")
                 console.log(err)
                 logErrorAndExit(true)
                 throw new Error(err)
@@ -110,7 +70,7 @@ const processDataRequest = async () => {
 
 const preparePage = async () => {
     browser = await puppeteer.launch({
-         headless: false,
+         headless: true,
         //headless: true,
         args: [
             '--no-sandbox',
@@ -131,7 +91,7 @@ const preparePage = async () => {
     await page.setDefaultNavigationTimeout(20000)
     await page.setDefaultTimeout(20000)
 
-    await page.goto(URL_BYMA_ACCIONES, {
+    await page.goto(URL_BNA, {
         waitUntil: 'networkidle0'
     })
 
